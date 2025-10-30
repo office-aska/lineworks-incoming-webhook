@@ -33,7 +33,7 @@ func init() {
 		pk,
 	)
 
-	functions.HTTP("notify", notify)
+	functions.HTTP("Notify", notify)
 }
 
 func getOrCreateToken(ctx context.Context) (string, error) {
