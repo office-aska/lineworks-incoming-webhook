@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"cloud.google.com/go/firestore"
 	"github.com/GoogleCloudPlatform/functions-framework-go/functions"
@@ -71,12 +72,30 @@ func getOrCreateToken(ctx context.Context) (string, error) {
 
 func notify(w http.ResponseWriter, r *http.Request) {
 	ctx := context.Background()
+	retryKey := r.FormValue("retry_key")
+	if retryKey != "" {
+		fsClient, err := firestore.NewClient(ctx, os.Getenv("GCP_PROJECT"))
+		if err != nil {
+			return
+		}
+		defer fsClient.Close()
+		fs := NewFirestore(fsClient)
+		retryKeyCol := "RetryKey"
+		key, err := fs.LoadRetryKey(ctx, retryKeyCol, retryKey)
+		if err == nil && key != nil {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(fmt.Sprintf("skip %s", key.CreatedAt.Format(time.RFC3339))))
+			return
+		}
+		fs.SaveRetryKey(ctx, retryKeyCol, retryKey)
+	}
 	channelID := r.FormValue("channel_id")
 	text := r.FormValue("text")
 	token, err := getOrCreateToken(ctx)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(fmt.Sprintf("error: %v", err)))
+		return
 	}
 
 	if err := bot.SendTextMessage(token, channelID, text); err != nil {
